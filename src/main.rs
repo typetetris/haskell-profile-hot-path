@@ -12,6 +12,7 @@ struct CostCentre {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Profile {
+    #[serde(rename(deserialize = "id"))]
     cost_centre: u64,
     entries: u64,
     alloc: u64,
@@ -53,7 +54,7 @@ fn analyse_profile(input: Profile, cost_centres: &HashMap<u64, CostCentre>) -> A
         .cloned()
         .map(|c| analyse_profile(c, cost_centres))
         .collect();
-    our_children.sort_by(|lhs, rhs| lhs.ticks_cumulative.cmp(&rhs.ticks_cumulative));
+    our_children.sort_by(|lhs, rhs| lhs.ticks_cumulative.cmp(&rhs.ticks_cumulative).reverse());
 
     let (label, module, src_loc) = cost_centres.get(&input.cost_centre).map_or(
         (
@@ -71,7 +72,7 @@ fn analyse_profile(input: Profile, cost_centres: &HashMap<u64, CostCentre>) -> A
         entries: input.entries,
         alloc: input.alloc,
         ticks: input.ticks,
-        ticks_cumulative: our_children.iter().map(|c| c.ticks_cumulative).sum(),
+        ticks_cumulative: our_children.iter().map(|c| c.ticks_cumulative).sum::<u64>() + input.ticks,
         children: our_children,
     }
 }
@@ -98,9 +99,12 @@ fn main() -> anyhow::Result<()> {
     let stdin = std::io::stdin();
     stdin.lock().read_to_end(&mut data)?;
 
-    let input: TopLevel<Profile> = serde_json::from_slice(&data)?;
-    let stdout = std::io::stdout();
-    serde_json::to_writer(stdout.lock(), &analyse(input))?;
+    let mut deserializer = serde_json::Deserializer::from_slice(&data);
+    deserializer.disable_recursion_limit();
+    for input in deserializer.into_iter() {
+        let stdout = std::io::stdout();
+        serde_json::to_writer(stdout.lock(), &analyse(input?))?;
+    }
 
     Ok(())
 }
